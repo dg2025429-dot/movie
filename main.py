@@ -215,3 +215,87 @@ st.markdown(
     f"**이 그래프로 알 수 있는 것:** '{top_nation}' 제작 영화가 가장 많은 비중을 차지하며, "
     f"국가마다 선호되는 장르 구성이 다르게 나타납니다."
 )
+
+st.divider()
+
+# ------------------------------------------------------------------
+# 흥행 유형 분류: days_in_top10 중앙값 기준으로 반짝 흥행 / 롱런 흥행 구분
+# ------------------------------------------------------------------
+days_median = df["days_in_top10"].median()
+df["흥행유형"] = df["days_in_top10"].apply(
+    lambda x: "롱런 흥행" if x > days_median else "반짝 흥행"
+)
+
+# ------------------------------------------------------------------
+# 그래프 8: 10위권 체류일수 히스토그램 (반짝 흥행 vs 롱런 흥행)
+# ------------------------------------------------------------------
+st.header("8. 반짝 흥행 vs 롱런 흥행")
+
+fig8 = px.histogram(
+    df,
+    x="days_in_top10",
+    color="흥행유형",
+    nbins=30,
+    title="박스오피스 10위권 체류일수 분포",
+    labels={"days_in_top10": "10위권 체류일수", "count": "영화 편수"},
+    barmode="overlay",
+    opacity=0.75,
+)
+fig8.add_vline(
+    x=days_median,
+    line_dash="dash",
+    line_color="gray",
+    annotation_text=f"중앙값 {days_median:.0f}일",
+)
+st.plotly_chart(fig8, use_container_width=True)
+
+avg_by_type = df.groupby("흥행유형")["total_audi"].mean()
+st.markdown(
+    f"**이 그래프로 알 수 있는 것:** 10위권 체류일수 중앙값({days_median:.0f}일)을 기준으로 "
+    f"'반짝 흥행' 영화의 평균 총 관객은 {avg_by_type.get('반짝 흥행', 0):,.0f}명, "
+    f"'롱런 흥행' 영화의 평균 총 관객은 {avg_by_type.get('롱런 흥행', 0):,.0f}명으로, "
+    f"오래 버틴 영화일수록 대체로 총 관객도 더 많은 경향을 보입니다."
+)
+
+st.divider()
+
+# ------------------------------------------------------------------
+# 영화 검색: 특정 영화 하나를 골라 상세 지표 확인
+# ------------------------------------------------------------------
+st.header("🔍 영화 검색")
+
+movie_list = sorted(df["movieNm"].dropna().unique())
+selected_movie = st.selectbox("영화명을 입력하거나 선택하세요", movie_list)
+
+if selected_movie:
+    row = df[df["movieNm"] == selected_movie].iloc[0]
+
+    st.subheader(f"'{selected_movie}' 상세 정보")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("장르", row["genre"])
+    col2.metric("제작 국가", row["nation"])
+    col3.metric(
+        "개봉일",
+        row["openDt"].strftime("%Y-%m-%d") if pd.notna(row["openDt"]) else "정보 없음",
+    )
+    col4.metric("흥행 유형", row["흥행유형"])
+
+    col5, col6, col7, col8 = st.columns(4)
+    col5.metric("개봉일 스크린수", f"{row['first_scrn']:,.0f}")
+    col6.metric("개봉일 상영횟수", f"{row['first_show']:,.0f}")
+    col7.metric("첫 주 관객", f"{row['first_week_audi']:,.0f}")
+    col8.metric("총 관객", f"{row['total_audi']:,.0f}")
+
+    st.metric("10위권 체류일수", f"{row['days_in_top10']:,.0f}일")
+
+    genre_avg = df[df["genre"] == row["genre"]]["total_audi"].mean()
+    diff_pct = (row["total_audi"] - genre_avg) / genre_avg * 100 if genre_avg else 0
+    st.markdown(
+        f"**이 영화에 대해 알 수 있는 것:** '{selected_movie}'는 같은 '{row['genre']}' 장르 "
+        f"평균 총 관객({genre_avg:,.0f}명) 대비 {diff_pct:+.1f}% "
+        f"{'많은' if diff_pct >= 0 else '적은'} 관객을 동원했고, "
+        f"첫 주 관객이 총 관객의 {row['first_week_audi'] / row['total_audi'] * 100:.1f}%를 차지해 "
+        f"{'초반 몰입형' if row['first_week_audi'] / row['total_audi'] > 0.5 else '입소문 지속형'} "
+        f"흥행 패턴을 보입니다."
+    )
