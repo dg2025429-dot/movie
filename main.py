@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 
 st.set_page_config(page_title="영화 데이터 그래프 도감 2 - 분포와 관계", layout="wide")
@@ -298,4 +299,57 @@ if selected_movie:
         f"첫 주 관객이 총 관객의 {row['first_week_audi'] / row['total_audi'] * 100:.1f}%를 차지해 "
         f"{'초반 몰입형' if row['first_week_audi'] / row['total_audi'] > 0.5 else '입소문 지속형'} "
         f"흥행 패턴을 보입니다."
+    )
+
+    st.markdown("---")
+    st.subheader("🎬 비슷한 흥행 패턴의 영화 Top 5")
+    st.caption(
+        "평점 데이터가 없어 '재미'가 아닌, 장르·제작 국가·스크린수·관객 규모·흥행 지속력이 "
+        "비슷한 영화를 찾아주는 기능입니다."
+    )
+
+    @st.cache_data
+    def build_feature_matrix(data: pd.DataFrame) -> np.ndarray:
+        numeric_cols = ["total_audi", "first_scrn", "first_week_audi", "days_in_top10"]
+        numeric_df = data[numeric_cols].astype(float)
+        numeric_df = (numeric_df - numeric_df.mean()) / numeric_df.std().replace(0, 1)
+        genre_dummies = pd.get_dummies(data["genre"], prefix="genre")
+        nation_dummies = pd.get_dummies(data["nation"], prefix="nation")
+        features = pd.concat([numeric_df, genre_dummies, nation_dummies], axis=1).fillna(0)
+        return features.values
+
+    feature_matrix = build_feature_matrix(df)
+    target_idx = df.index[df["movieNm"] == selected_movie][0]
+    target_vec = feature_matrix[target_idx]
+
+    norms = np.linalg.norm(feature_matrix, axis=1)
+    target_norm = np.linalg.norm(target_vec)
+    similarities = feature_matrix @ target_vec / (norms * target_norm + 1e-9)
+
+    sim_df = df.copy()
+    sim_df["유사도"] = similarities
+    sim_df = sim_df[sim_df["movieNm"] != selected_movie].sort_values(
+        "유사도", ascending=False
+    ).head(5)
+
+    st.dataframe(
+        sim_df[["movieNm", "genre", "nation", "total_audi", "유사도"]]
+        .rename(
+            columns={
+                "movieNm": "영화명",
+                "genre": "장르",
+                "nation": "제작 국가",
+                "total_audi": "총 관객",
+            }
+        )
+        .style.format({"총 관객": "{:,.0f}", "유사도": "{:.2f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    most_similar = sim_df.iloc[0]
+    st.markdown(
+        f"**이 표로 알 수 있는 것:** '{selected_movie}'와 가장 흥행 패턴이 비슷한 영화는 "
+        f"'{most_similar['movieNm']}'(유사도 {most_similar['유사도']:.2f})로, "
+        f"장르·국가·흥행 규모·체류일수 등 수치 패턴이 유사합니다."
     )
