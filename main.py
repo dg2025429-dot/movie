@@ -316,7 +316,7 @@ if selected_movie:
         genre_dummies = pd.get_dummies(data["genre"], prefix="genre")
         nation_dummies = pd.get_dummies(data["nation"], prefix="nation")
         features = pd.concat([numeric_df, genre_dummies, nation_dummies], axis=1).fillna(0)
-        return features.values
+        return features.values.astype(float)
 
     feature_matrix = build_feature_matrix(df)
     target_idx = df.index[df["movieNm"] == selected_movie][0]
